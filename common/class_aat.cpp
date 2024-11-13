@@ -57,26 +57,6 @@ static string* alloc_and_copy_array(const string* source, int size)
 
 	return array;
 }
-static string IPuint_to_str(const unsigned int ip)
-{
-	stringstream ss;
-	ss << ((ip >> 24) & 0xFF) << '.' // 获取第一段 IP 地址
-		<< ((ip >> 16) & 0xFF) << '.' // 获取第二段 IP 地址
-		<< ((ip >> 8) & 0xFF) << '.'  // 获取第三段 IP 地址
-		<< (ip & 0xFF);               // 获取第四段 IP 地址
-	return ss.str();
-}
-
-static int int_bit_num(int a)
-{
-	int cnt = 1;
-	while (a / 10)
-	{
-		cnt++;
-		a = a / 10;
-	}
-	return cnt;
-}
 
 /***************************************************************************
   函数名称：
@@ -454,7 +434,7 @@ args_analyse_tools::args_analyse_tools(const char* name, const enum ST_EXTARGS_T
 /***************************************************************************
   函数名称：
   功    能：
-  输入参数：
+  输入参数：f
   返 回 值：
   说    明：double_with_default、double_with_error
  ***************************************************************************/
@@ -736,23 +716,45 @@ int args_analyse_print(const args_analyse_tools* const args) {
 
 		// 计算ranset_length
 		int ran_len = 0, set_len = 0;
+
 		if (args[i].is_intrange) { // intrange类型
-			ran_len = int_bit_num(args[i].extargs_int_min) + int_bit_num(args[i].extargs_int_max) + 5; // [ .. ] 空格
+			// 计算数字的位数
+			int min_len = 1, max_len = 1;
+			int int_min = args[i].extargs_int_min;
+			int int_max = args[i].extargs_int_max;
+
+			while (int_min / 10) {
+				min_len++;
+				int_min = int_min / 10;
+			}
+
+			while (int_max / 10) {
+				max_len++;
+				int_max = int_max / 10;
+			}
+
+			ran_len = min_len + max_len + 5; // [ .. ] 空格
 		}
 		else if (args[i].is_intset) { // intset类型
 			for (int j = 0; args[i].extargs_int_set[j] != INVALID_INT_VALUE_OF_SET; j++) {
-				set_len += (int_bit_num(args[i].extargs_int_set[j]) + 1);
+				// 计算数字的位数
+				int int_value = args[i].extargs_int_set[j];
+				int bit_len = 1;
+				while (int_value / 10) {
+					bit_len++;
+					int_value = int_value / 10;
+				}
+				set_len += (bit_len + 1); // 每个数字长度加上 1 (因为有 "/")
 			}
 		}
+
 		else if (args[i].is_strset) { // strset
 			for (int j = 0; args[i].extargs_string_set[j] != ""; j++) {
 				set_len += ((int)args[i].extargs_string_set[j].size() + 1);
 			}
 		}
-		else if (args[i].extargs_type == ST_EXTARGS_TYPE::double_with_default ||
-			args[i].extargs_type == ST_EXTARGS_TYPE::double_with_error ||
-			args[i].extargs_type == ST_EXTARGS_TYPE::double_with_set_default ||
-			args[i].extargs_type == ST_EXTARGS_TYPE::double_with_set_error) {
+		else if (args[i].extargs_type == ST_EXTARGS_TYPE::double_with_default || args[i].extargs_type == ST_EXTARGS_TYPE::double_with_error || 
+			args[i].extargs_type == ST_EXTARGS_TYPE::double_with_set_default || args[i].extargs_type == ST_EXTARGS_TYPE::double_with_set_error) {
 			// 计算double的最大长度
 			int double_len = 0;
 			stringstream ss;
@@ -764,8 +766,7 @@ int args_analyse_print(const args_analyse_tools* const args) {
 			ran_len = double_len + 2; // "[  .. ]" 空格
 
 			// 如果是 double with set (set的情况)
-			if (args[i].extargs_type == ST_EXTARGS_TYPE::double_with_set_default ||
-				args[i].extargs_type == ST_EXTARGS_TYPE::double_with_set_error) {
+			if (args[i].extargs_type == ST_EXTARGS_TYPE::double_with_set_default || args[i].extargs_type == ST_EXTARGS_TYPE::double_with_set_error) {
 				for (int j = 0; args[i].extargs_double_set[j] != INVALID_DOUBLE_VALUE_OF_SET; j++) {
 					ss.str(""); // 清空字符串流
 					ss << fixed << setprecision(6) << args[i].extargs_double_set[j];
@@ -786,10 +787,8 @@ int args_analyse_print(const args_analyse_tools* const args) {
 
 
 		// 对于 double 类型，计算最大长度并更新 default_length 和 value_length
-		if (args[i].extargs_type == ST_EXTARGS_TYPE::double_with_default ||
-			args[i].extargs_type == ST_EXTARGS_TYPE::double_with_set_default ||
-			args[i].extargs_type == ST_EXTARGS_TYPE::double_with_error ||
-			args[i].extargs_type == ST_EXTARGS_TYPE::double_with_set_error) {
+		if (args[i].extargs_type == ST_EXTARGS_TYPE::double_with_default || args[i].extargs_type == ST_EXTARGS_TYPE::double_with_set_default 
+			|| args[i].extargs_type == ST_EXTARGS_TYPE::double_with_error || args[i].extargs_type == ST_EXTARGS_TYPE::double_with_set_error) {
 			// 确保宽度足够显示浮动小数（6位小数）
 			int double_length = 0;
 			stringstream ss;
@@ -797,24 +796,48 @@ int args_analyse_print(const args_analyse_tools* const args) {
 			double_length = ss.str().size(); // 获取显示时需要的字符数
 
 			default_length = max(default_length, double_length);
-			value_length = max(value_length, double_length);
 		}
 		else {
 			string default_print = "/";
-			if (args[i].extargs_type == ST_EXTARGS_TYPE::boolean) {
-				default_print = args[i].extargs_bool_default ? "true" : "false";
-			}
-			else if (args[i].extargs_type == ST_EXTARGS_TYPE::int_with_default || args[i].extargs_type == ST_EXTARGS_TYPE::int_with_set_default) {
-				default_print = to_string(args[i].extargs_int_default);
-			}
-			else if (args[i].extargs_type == ST_EXTARGS_TYPE::str_with_set_default || (args[i].extargs_type == ST_EXTARGS_TYPE::str && args[i].extargs_string_default != "")) {
-				default_print = args[i].extargs_string_default;
-			}
-			else if (args[i].extargs_type == ST_EXTARGS_TYPE::ipaddr_with_default) {
-				default_print = IPuint_to_str(args[i].extargs_ipaddr_default);
+
+			// 获取类型的整数值
+			int type_id = static_cast<int>(args[i].extargs_type);
+
+			switch (type_id) {
+				case static_cast<int>(ST_EXTARGS_TYPE::boolean): {
+					default_print = args[i].extargs_bool_default ? "true" : "false";
+					break;
+				}
+				case static_cast<int>(ST_EXTARGS_TYPE::int_with_default):
+				case static_cast<int>(ST_EXTARGS_TYPE::int_with_set_default): {
+					default_print = to_string(args[i].extargs_int_default);
+					break;
+				}
+				case static_cast<int>(ST_EXTARGS_TYPE::str_with_set_default):
+				case static_cast<int>(ST_EXTARGS_TYPE::str): {
+					if (!args[i].extargs_string_default.empty()) {
+						default_print = args[i].extargs_string_default;
+					}
+					break;
+				}
+				case static_cast<int>(ST_EXTARGS_TYPE::ipaddr_with_default): {
+					unsigned int ip = args[i].extargs_ipaddr_default;
+					stringstream ss;
+					ss << ((ip >> 24) & 0xFF) << '.' // 获取第一段 IP 地址
+						<< ((ip >> 16) & 0xFF) << '.' // 获取第二段 IP 地址
+						<< ((ip >> 8) & 0xFF) << '.'  // 获取第三段 IP 地址
+						<< (ip & 0xFF);               // 获取第四段 IP 地址
+					default_print = ss.str();
+					break;
+				}
+				default: {
+					// 默认情况下保持默认值 "/"
+					break;
+				}
 			}
 
-			default_length = max(default_length, (int)default_print.size() + 1);
+			default_length = max(default_length, static_cast<int>(default_print.size()) + 1);
+
 		}
 	}
 
@@ -825,12 +848,7 @@ int args_analyse_print(const args_analyse_tools* const args) {
 	cout << setw(all_length) << setfill('=') << '=' << endl;
 
 	// 打印表头
-	cout << " " << setw(name_length) << setfill(' ') << "name"
-		<< setw(type_length) << "type"
-		<< setw(default_length) << "default"
-		<< setw(exists_length) << "exists"
-		<< setw(value_length) << "value"
-		<< "range/set" << endl;
+	cout << " " << setw(name_length) << setfill(' ') << head[0] << setw(type_length) << head[1] << setw(default_length) << head[2] << setw(exists_length) << head[3] << setw(value_length) << head[4] << head[5] << endl;
 
 	cout << setw(all_length) << setfill('=') << '=' << endl;
 
@@ -841,21 +859,50 @@ int args_analyse_print(const args_analyse_tools* const args) {
 
 		// 计算默认值
 		string default_print = "/";
-		if (args[i].extargs_type == ST_EXTARGS_TYPE::boolean) {
-			default_print = args[i].extargs_bool_default ? "true" : "false";
+
+		// 获取类型的整数值
+		int type_id = static_cast<int>(args[i].extargs_type);
+
+		switch (type_id) {
+			case static_cast<int>(ST_EXTARGS_TYPE::boolean): {
+				default_print = args[i].extargs_bool_default ? "true" : "false";
+				break;
+			}
+			case static_cast<int>(ST_EXTARGS_TYPE::int_with_default):
+			case static_cast<int>(ST_EXTARGS_TYPE::int_with_set_default): {
+				default_print = to_string(args[i].extargs_int_default);
+				break;
+			}
+			case static_cast<int>(ST_EXTARGS_TYPE::double_with_default):
+			case static_cast<int>(ST_EXTARGS_TYPE::double_with_set_default): {
+				default_print = to_string(args[i].extargs_double_default);
+				break;
+			}
+			case static_cast<int>(ST_EXTARGS_TYPE::str_with_set_default):
+			case static_cast<int>(ST_EXTARGS_TYPE::str): {
+				if (!args[i].extargs_string_default.empty()) {
+					default_print = args[i].extargs_string_default;
+				}
+				break;
+			}
+			case static_cast<int>(ST_EXTARGS_TYPE::ipaddr_with_default): {
+				unsigned int ip = args[i].extargs_ipaddr_default;
+				stringstream ss;
+				ss << ((ip >> 24) & 0xFF) << '.' // 获取第一段 IP 地址
+					<< ((ip >> 16) & 0xFF) << '.' // 获取第二段 IP 地址
+					<< ((ip >> 8) & 0xFF) << '.'  // 获取第三段 IP 地址
+					<< (ip & 0xFF);               // 获取第四段 IP 地址
+				default_print = ss.str();
+				break;
+			}
+			default: {
+				// 如果不匹配任何类型，保持 default_print 为 "/"
+				break;
+			}
 		}
-		else if (args[i].extargs_type == ST_EXTARGS_TYPE::int_with_default || args[i].extargs_type == ST_EXTARGS_TYPE::int_with_set_default) {
-			default_print = to_string(args[i].extargs_int_default);
-		}
-		else if (args[i].extargs_type == ST_EXTARGS_TYPE::double_with_default || args[i].extargs_type == ST_EXTARGS_TYPE::double_with_set_default) {
-			default_print = to_string(args[i].extargs_double_default);
-		}
-		else if (args[i].extargs_type == ST_EXTARGS_TYPE::str_with_set_default || (args[i].extargs_type == ST_EXTARGS_TYPE::str && args[i].extargs_string_default != "")) {
-			default_print = args[i].extargs_string_default;
-		}
-		else if (args[i].extargs_type == ST_EXTARGS_TYPE::ipaddr_with_default) {
-			default_print = IPuint_to_str(args[i].extargs_ipaddr_default);
-		}
+
+		// 计算 default_length
+		default_length = max(default_length, static_cast<int>(default_print.size()) + 1);
 
 		cout << setw(default_length) << default_print;
 
@@ -875,7 +922,19 @@ int args_analyse_print(const args_analyse_tools* const args) {
 				value_print = args[i].extargs_string_value;
 			}
 			else if (args[i].is_ip) {
-				value_print = IPuint_to_str(args[i].extargs_ipaddr_value);
+				string value_print0 = "/";
+
+				// 处理 IP 地址类型
+				if (args[i].args_existed && args[i].is_ip) {
+					unsigned int ip = args[i].extargs_ipaddr_value;
+					stringstream ss;
+					ss << ((ip >> 24) & 0xFF) << '.' // 获取第一段 IP 地址
+						<< ((ip >> 16) & 0xFF) << '.' // 获取第二段 IP 地址
+						<< ((ip >> 8) & 0xFF) << '.'  // 获取第三段 IP 地址
+						<< (ip & 0xFF);               // 获取第四段 IP 地址
+					value_print0 = ss.str();
+				}
+				value_print = value_print0;
 			}
 			else if (args[i].is_double) {
 				value_print = to_string(args[i].extargs_double_value);
@@ -898,7 +957,6 @@ int args_analyse_print(const args_analyse_tools* const args) {
 			}
 		}
 		else if (args[i].extargs_type == ST_EXTARGS_TYPE::double_with_default || args[i].extargs_type == ST_EXTARGS_TYPE::double_with_error) {
-			// 设置输出 6 位小数
 			cout << fixed << setprecision(6) << "[" << args[i].extargs_double_min << ".." << args[i].extargs_double_max << "]";
 		}
 		else if (args[i].extargs_type == ST_EXTARGS_TYPE::double_with_set_default || args[i].extargs_type == ST_EXTARGS_TYPE::double_with_set_error) {
@@ -914,11 +972,7 @@ int args_analyse_print(const args_analyse_tools* const args) {
 
 	// 打印表尾线
 	cout << setw(all_length) << setfill('=') << '=' << endl;
-	//cout << resetiosflags(ios::left) << setiosflags(ios::right);
-	cout << endl;
+	cout << defaultfloat << endl;
 	return 0;
 }
-
-
-
 #endif // !ENABLE_LIB_COMMON_TOOLS

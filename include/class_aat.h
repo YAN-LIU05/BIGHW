@@ -77,6 +77,14 @@ const string type_name[] = {
 	"IPAddrWithError" ,
 	"tmax"
 };
+const string head[] = {
+	"name",
+	"type",
+	"default",
+	"exists",
+	 "value",
+	"range/set"
+};
 const string args_parm_name[] = {
 	"null",
 	"bool",
