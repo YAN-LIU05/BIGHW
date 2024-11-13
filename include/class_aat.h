@@ -16,7 +16,7 @@ using namespace std;
 		1、本项(ENABLE_LIB_COMMON_TOOLS)必须置0
 		2、从对应的 lib 目录中删除 lib_common_tools.lib
 ----------------------------------------------------------------------------------------------------------------------------------------------------------- */
-#define ENABLE_LIB_COMMON_TOOLS			 1
+#define ENABLE_LIB_COMMON_TOOLS			 0
 
 #if ENABLE_LIB_COMMON_TOOLS
 
@@ -55,8 +55,45 @@ enum class ST_EXTARGS_TYPE {
 	 允许加入其它需要的定义
 	 const全局变量/static全局变量(慎用)/define/class/struct/enum/enum class/union等
    ---------------------------------------------------------------- */
-
-
+#define DEFINE_INT_MAX  1
+#define DEFINE_INT_MIN  -1
+#define DEFINE_DOUBLE_MAX  1.0
+#define DEFINE_DOUBLE_MIN  -1.0
+const string type_name[] = {
+	"null",
+	"Bool",
+	"IntWithDefault",
+	"IntWithError",
+	"IntSETWithDefault",
+	"IntSETWithError",
+	"DoubleWithDefault",
+	"DoubleWithError",
+	"DoubleSETWithDefault",
+	"DoubleSETWithError",
+	"String",
+	"StringSETWithDefault",
+	"StringSETWithError",
+	"IPAddrWithDefault",
+	"IPAddrWithError" ,
+	"tmax"
+};
+const string args_parm_name[] = {
+	"null",
+	"bool",
+	"int",
+	"int",
+	"int",
+	"int",
+	"double",
+	"double",
+	"double",
+	"double",
+	"string",
+	"string",
+	"string",
+	"IP地址",
+	"IP地址"
+};
 
 /* ---------------------------------------------------------------
 	   class args_analyse_tools的定义，已有部分不要动，允许private加入其它需要的定义
@@ -97,8 +134,15 @@ private:
 		   1、为了与lib库中的class相同，最多允许定义额外的68字节成员
 		   2、如果需要自定义数据成员，则相应扣减pad数组的大小，维持总大小200字节不变
 	   ---------------------------------------------------------------- */
-	char pad[68];
-
+	char pad[68 - 2 * sizeof(int) - 16 * sizeof(bool)];
+	//长度变量
+	int default_length, value_length;
+	// 标识变量的类型
+	bool is_bool, is_double, is_int, is_string, is_ip;
+	//检查默认值的存在
+	bool have_str_def, have_double_def, have_int_def, have_ip_def;
+	//判断集合或范围
+	bool is_intset, is_double_set, is_strset, is_intrange, is_doublerange;
 public:
 	args_analyse_tools();
 	args_analyse_tools(const char* arg_name, const enum ST_EXTARGS_TYPE type, const int ext_num, const bool def);
