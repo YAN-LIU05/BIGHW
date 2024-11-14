@@ -85,7 +85,7 @@ const string head[] = {
 	 "value",
 	"range/set"
 };
-const string args_parm_name[] = {
+const string item_name[] = {
 	"null",
 	"bool",
 	"int",
@@ -102,6 +102,7 @@ const string args_parm_name[] = {
 	"IP地址",
 	"IP地址"
 };
+
 
 /* ---------------------------------------------------------------
 	   class args_analyse_tools的定义，已有部分不要动，允许private加入其它需要的定义
@@ -142,13 +143,11 @@ private:
 		   1、为了与lib库中的class相同，最多允许定义额外的68字节成员
 		   2、如果需要自定义数据成员，则相应扣减pad数组的大小，维持总大小200字节不变
 	   ---------------------------------------------------------------- */
-	char pad[68 - 2 * sizeof(int) - 16 * sizeof(bool)];
+	char pad[68 - 2 * sizeof(int) - 12 * sizeof(bool)];
 	//长度变量
 	int default_length, value_length;
 	// 标识变量的类型
 	bool is_bool, is_double, is_int, is_string, is_ip;
-	//检查默认值的存在
-	bool have_str_def, have_double_def, have_int_def, have_ip_def;
 	//判断集合或范围
 	bool is_intset, is_double_set, is_strset, is_intrange, is_doublerange;
 public:

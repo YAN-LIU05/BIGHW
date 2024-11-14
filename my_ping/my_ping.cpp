@@ -21,6 +21,32 @@ enum OPT_ARGS {
 
 /* 允许自行添加其它函数，也可以将自定义函数放在其它cpp中 */
 
+// 验证 IP 段
+static bool check_ip_segment(const char* segment_start, int length)
+{
+	if (length == 0) return false; // 段为空，返回无效
+
+	int segment_value = 0; // 当前段的数值
+
+	// 将段转换为整数
+	for (int j = 0; j < length; ++j)
+	{
+		if (segment_start[j] < '0' || segment_start[j] > '9')
+		{
+			return false; // 不是数字，标记为无效
+		}
+		segment_value = segment_value * 10 + (segment_start[j] - '0'); // 计算数值
+	}
+
+	// 检查段的有效性
+	if (segment_value < 0 || segment_value > 255)
+		return false; // 值超出范围
+	if (length > 1 && segment_start[0] == '0')
+		return false; // 前导零不合法
+
+	return true; // 段有效
+}
+
 /***************************************************************************
   函数名称：
   功    能：
@@ -93,7 +119,46 @@ static void usage(const char* const fullpath_procname)
 #if IPADDR_IS_FIXED_ARGS
 static bool is_ipaddr_valid(const char* const ipstr)
 {
-	return true; //本函数需要自行实现，返回值按需修改
+	int segments[4] = { 0 }; // 用于存储每个段的长度
+	int segment_count = 0;   // 段计数
+	const char* segment_start = ipstr; // 当前段的起始位置
+
+	// 遍历 IP 字符串，查找分隔符 '.'
+	for (const char* p = ipstr; *p; ++p)
+	{
+		if (*p == '.')
+		{
+			if (segment_count >= 4)
+				return false; // 段数超过 4，返回 false
+			segments[segment_count++] = p - segment_start; // 记录段的长度
+			segment_start = p + 1; // 更新下一个段的起始位置
+		}
+	}
+
+	// 处理最后一个段
+	int last_segment_length = strlen(segment_start);
+	if (segment_count != 3 || last_segment_length == 0)
+		return false; // 必须有 4 个段且最后一段不能为空
+
+	// 验证每个段
+	segment_start = ipstr; // 重置段的起始位置
+	for (int i = 0; i < 4; ++i)
+	{
+		if (i < 3)
+		{
+			if (!check_ip_segment(segment_start, segments[i]))
+				return false; // 如果段无效，返回 false
+			segment_start += segments[i] + 1; // 更新下一个段的起始位置
+		}
+		else
+		{
+			// 检查最后一段的有效性
+			if (!check_ip_segment(segment_start, last_segment_length))
+				return false; // 如果最后一段无效，返回 false
+		}
+	}
+
+	return true; // 所有段均有效
 }
 #endif
 
