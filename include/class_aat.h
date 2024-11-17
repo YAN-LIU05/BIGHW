@@ -149,7 +149,7 @@ private:
 	// 标识变量的类型
 	bool is_bool, is_double, is_int, is_string, is_ip;
 	//判断集合或范围
-	bool is_intset, is_double_set, is_strset, is_intrange, is_doublerange;
+	bool have_intset, have_doubleset, have_stringset, have_intrange, have_doublerange;
 public:
 	args_analyse_tools();
 	args_analyse_tools(const char* arg_name, const enum ST_EXTARGS_TYPE type, const int ext_num, const bool def);

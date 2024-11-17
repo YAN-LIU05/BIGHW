@@ -204,7 +204,7 @@ args_analyse_tools::args_analyse_tools()
 	memset(pad, 0, sizeof(pad));
 
 	is_bool = is_int = is_double = is_string = is_ip = false;
-	is_intrange = is_doublerange = is_intset = is_double_set = is_strset = false;
+	have_intrange = have_doublerange = have_intset = have_doubleset = have_stringset = false;
 	default_length = value_length = 2;
 }
 
@@ -253,7 +253,7 @@ args_analyse_tools::args_analyse_tools(const char* name, const enum ST_EXTARGS_T
 
 	is_bool = true;
 	is_int = is_double = is_string = is_ip = false;
-	is_intrange = is_doublerange = is_intset = is_double_set = is_strset = false;
+	have_intrange = have_doublerange = have_intset = have_doubleset = have_stringset = false;
 	default_length = (def) ? 5 : 6;
 	value_length = 2;
 
@@ -319,9 +319,9 @@ args_analyse_tools::args_analyse_tools(const char* name, const enum ST_EXTARGS_T
 
 	memset(pad, 0, sizeof(pad));
 
-	is_intrange = true;
+	have_intrange = true;
 	is_bool = is_int = is_double = is_string = is_ip = false;
-	is_doublerange = is_intset = is_double_set = is_strset = false;
+	have_doublerange = have_intset = have_doubleset = have_stringset = false;
 	value_length = 2;
 }
 
@@ -392,9 +392,9 @@ args_analyse_tools::args_analyse_tools(const char* name, const enum ST_EXTARGS_T
 
 	memset(pad, 0, sizeof(pad));
 
-	is_intset = true;
+	have_intset = true;
 	is_bool = is_int = is_double = is_string = is_ip = false;
-	is_intrange = is_doublerange = is_double_set = is_strset = false;
+	have_intrange = have_doublerange = have_doubleset = have_stringset = false;
 	value_length = 2;
 }
 
@@ -469,7 +469,7 @@ args_analyse_tools::args_analyse_tools(const char* name, const enum ST_EXTARGS_T
 		is_ip = true;
 	}
 	is_bool = is_int = is_double = false;
-	is_intrange = is_doublerange = is_intset = is_double_set = is_strset = false;
+	have_intrange = have_doublerange = have_intset = have_doubleset = have_stringset = false;
 	default_length = (int)def.size() + 1;
 	value_length = 2;
 }
@@ -525,9 +525,9 @@ args_analyse_tools::args_analyse_tools(const char* name, const enum ST_EXTARGS_T
 	memset(pad, 0, sizeof(pad));
 
 	default_length = int(extargs_string_default.size()) + 1;
-	is_strset = true;
+	have_stringset = true;
 	is_bool = is_int = is_double = is_string = is_ip = false;
-	is_intrange = is_doublerange = is_intset = is_double_set = false;
+	have_intrange = have_doublerange = have_intset = have_doubleset = false;
 	value_length = 2;
 }
 
@@ -590,9 +590,9 @@ args_analyse_tools::args_analyse_tools(const char* name, const enum ST_EXTARGS_T
 
 	memset(pad, 0, sizeof(pad));
 
-	is_doublerange = true;
+	have_doublerange = true;
 	is_bool = is_int = is_double = is_string = is_ip = false;
-	is_intrange = is_intset = is_double_set = is_strset = false;
+	have_intrange = have_intset = have_doubleset = have_stringset = false;
 	value_length = 2;
 }
 
@@ -662,9 +662,9 @@ args_analyse_tools::args_analyse_tools(const char* name, const enum ST_EXTARGS_T
 
 	memset(pad, 0, sizeof(pad));
 
-	is_double_set = true;
+	have_doubleset = true;
 	is_bool = is_int = is_double = is_string = is_ip = false;
-	is_intrange = is_doublerange = is_intset = is_strset = false;
+	have_intrange = have_doublerange = have_intset = have_stringset = false;
 	value_length = 2;
 }
 
@@ -1143,7 +1143,7 @@ int args_analyse_process(const int argc, const char* const* const argv, args_ana
 			return -1;
 		}
 	}
-	return cnt; //此句根据需要修改
+	return cnt; //此句根据需要修改range
 }
 
 
@@ -1156,8 +1156,7 @@ int args_analyse_process(const int argc, const char* const* const argv, args_ana
 ***************************************************************************/
 int args_analyse_print(const args_analyse_tools* const args) 
 {
-	int name_length = 5, type_length = 5, default_length = 8;
-	int exists_length = 7, value_length = 6, ranset_length = 10; // exists参数的7已经为最大值，不需要再判断
+	int name_length = 5, type_length = 5, default_length = 8, exists_length = 7, value_length = 6, ranset_length = 10; 
 
 	// 该部分用来计算每个列宽度
 	for (int i = 0; args[i].extargs_type != ST_EXTARGS_TYPE::null; i++) 
@@ -1166,10 +1165,10 @@ int args_analyse_print(const args_analyse_tools* const args)
 		type_length = max(type_length, (int)type_name[(int)args[i].extargs_type].size() + 1);
 		value_length = max(value_length, args[i].value_length);
 
-		// 计算ranset_length
-		int ran_len = 0, set_len = 0;
+		// 计算range_length
+		int range_length = 0, set_len = 0;
 
-		if (args[i].is_intrange) // intrange类型
+		if (args[i].have_intrange) // intrange类型
 		{ 
 			// 计算数字的位数
 			int min_len = 1, max_len = 1;
@@ -1188,9 +1187,9 @@ int args_analyse_print(const args_analyse_tools* const args)
 				int_max = int_max / 10;
 			}
 
-			ran_len = min_len + max_len + 5; // [ .. ] 空格
+			range_length = min_len + max_len + 5; // [ .. ] 空格
 		}
-		else if (args[i].is_intset) { // intset类型
+		else if (args[i].have_intset) { // intset类型
 			for (int j = 0; args[i].extargs_int_set[j] != INVALID_INT_VALUE_OF_SET; j++) 
 			{
 				// 计算数字的位数
@@ -1205,7 +1204,7 @@ int args_analyse_print(const args_analyse_tools* const args)
 			}
 		}
 
-		else if (args[i].is_strset)  // strset
+		else if (args[i].have_stringset)  // strset
 			for (int j = 0; args[i].extargs_string_set[j] != ""; j++) 
 				set_len += ((int)args[i].extargs_string_set[j].size() + 1);
 		else if (args[i].extargs_type == ST_EXTARGS_TYPE::double_with_default || args[i].extargs_type == ST_EXTARGS_TYPE::double_with_error ||
@@ -1219,7 +1218,7 @@ int args_analyse_print(const args_analyse_tools* const args)
 			ss.str("");
 			ss << fixed << setprecision(6) << args[i].extargs_double_max;
 			double_len = max(double_len, (int)ss.str().size()); // 最大值的长度
-			ran_len = double_len + 2; // "[  .. ]" 空格
+			range_length = double_len + 2; // "[  .. ]" 空格
 
 			// 如果是 double with set (set的情况)
 			if (args[i].extargs_type == ST_EXTARGS_TYPE::double_with_set_default || args[i].extargs_type == ST_EXTARGS_TYPE::double_with_set_error) 
@@ -1236,12 +1235,12 @@ int args_analyse_print(const args_analyse_tools* const args)
 		}
 		else 
 		{
-			ran_len = 2;
+			range_length = 2;
 			set_len = 2;
 		}
 
 		// 选择最大的长度
-		ranset_length = max(ranset_length, max(ran_len, set_len) + 1);
+		ranset_length = max(ranset_length, max(range_length, set_len) + 1);
 
 
 		// 对于 double 类型，计算最大长度并更新 default_length 和 value_length
@@ -1302,16 +1301,16 @@ int args_analyse_print(const args_analyse_tools* const args)
 			{
 				if (args[i].is_bool) 
 					value_print = "true";
-				else if (args[i].is_intrange || args[i].is_intset) 
+				else if (args[i].have_intrange || args[i].have_intset) 
 					value_print = to_string(args[i].extargs_int_value);
-				else if (args[i].is_doublerange || args[i].is_double_set) 
+				else if (args[i].have_doublerange || args[i].have_doubleset) 
 				{
 					stringstream ss;
 					ss << fixed << setprecision(6) << args[i].extargs_double_value;
 					value_print = ss.str();
 					value_length0 = ss.str().size();
 				}
-				else if (args[i].is_string || args[i].is_strset) 
+				else if (args[i].is_string || args[i].have_stringset) 
 					value_print = args[i].extargs_string_value;
 				else if (args[i].is_ip) 
 				{
@@ -1327,7 +1326,7 @@ int args_analyse_print(const args_analyse_tools* const args)
 					}
 					value_print = value_print0;
 				}
-				if (!(args[i].is_doublerange || args[i].is_double_set)) 
+				if (!(args[i].have_doublerange || args[i].have_doubleset)) 
 					value_length0 = value_print.size();
 			}
 			value_length = max(value_length, value_length0 + 1);    //warning:这里没有变
@@ -1388,16 +1387,16 @@ int args_analyse_print(const args_analyse_tools* const args)
 		{
 			if (args[i].is_bool) 
 				value_print = "true";
-			else if (args[i].is_intrange || args[i].is_intset) 
+			else if (args[i].have_intrange || args[i].have_intset) 
 				value_print = to_string(args[i].extargs_int_value);
-			else if (args[i].is_doublerange || args[i].is_double_set) 
+			else if (args[i].have_doublerange || args[i].have_doubleset) 
 			{
 				stringstream ss;
 				ss << fixed << setprecision(6) << args[i].extargs_double_value;
 				value_print = ss.str();
 				value_length0 = ss.str().size();
 			}
-			else if (args[i].is_string || args[i].is_strset) 
+			else if (args[i].is_string || args[i].have_stringset) 
 				value_print = args[i].extargs_string_value;
 			else if (args[i].is_ip) 
 			{
@@ -1416,7 +1415,7 @@ int args_analyse_print(const args_analyse_tools* const args)
 				}
 				value_print = value_print0;
 			}
-			if (!(args[i].is_doublerange || args[i].is_double_set)) 
+			if (!(args[i].have_doublerange || args[i].have_doubleset)) 
 				value_length0 = value_print.size();
 		}
 		value_length = max(value_length, value_length0 + 1);
@@ -1490,16 +1489,16 @@ int args_analyse_print(const args_analyse_tools* const args)
 		{
 			if (args[i].is_bool)
 				value_print = "true";
-			else if (args[i].is_intrange || args[i].is_intset)
+			else if (args[i].have_intrange || args[i].have_intset)
 				value_print = to_string(args[i].extargs_int_value);
-			else if (args[i].is_doublerange || args[i].is_double_set)
+			else if (args[i].have_doublerange || args[i].have_doubleset)
 			{
 				stringstream ss;
 				ss << fixed << setprecision(6) << args[i].extargs_double_value;
 				value_print = ss.str();
 				value_length0 = ss.str().size();
 			}
-			else if (args[i].is_string || args[i].is_strset)
+			else if (args[i].is_string || args[i].have_stringset)
 				value_print = args[i].extargs_string_value;
 			else if (args[i].is_ip)
 			{
@@ -1514,7 +1513,7 @@ int args_analyse_print(const args_analyse_tools* const args)
 				}
 				value_print = value_print0;
 			}
-			if (!(args[i].is_doublerange || args[i].is_double_set))
+			if (!(args[i].have_doublerange || args[i].have_doubleset))
 				value_length0 = value_print.size();
 		}
 		// 计算 value_length
@@ -1522,12 +1521,12 @@ int args_analyse_print(const args_analyse_tools* const args)
 		cout << setw(value_length) << value_print;
 
 		// 打印 range/set
-		if (args[i].is_intrange)
+		if (args[i].have_intrange)
 			cout << "[" << args[i].extargs_int_min << ".." << args[i].extargs_int_max << "]";
-		else if (args[i].is_intset)
+		else if (args[i].have_intset)
 			for (int j = 0; args[i].extargs_int_set[j] != INVALID_INT_VALUE_OF_SET; j++)
 				cout << (j == 0 ? "" : "/") << args[i].extargs_int_set[j];
-		else if (args[i].is_strset)
+		else if (args[i].have_stringset)
 			for (int j = 0; args[i].extargs_string_set[j] != ""; j++)
 				cout << (j == 0 ? "" : "/") << args[i].extargs_string_set[j];
 		else if (args[i].extargs_type == ST_EXTARGS_TYPE::double_with_default || args[i].extargs_type == ST_EXTARGS_TYPE::double_with_error)
