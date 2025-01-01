@@ -18,15 +18,6 @@
     <ClCompile Include="hw_check_main.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="hw_check_firstline.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="hw_check_secondline.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="hw_check_base.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="..\common\class_aat.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
@@ -36,25 +27,28 @@
     <ClCompile Include="..\common\class_cft.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="hw_check_tools.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="hw_check_class.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="hw_check.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="..\include\class_aat.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="..\include\class_cft.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="hw_check.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="hw_check_class.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <Library Include="..\lib_mariadb_x86\mariadbclient.lib">
-      <Filter>资源文件</Filter>
-    </Library>
-    <Library Include="..\lib_mariadb_x86\mysqlservices.lib">
-      <Filter>资源文件</Filter>
-    </Library>
     <Library Include="..\lib_mariadb_x86\libmariadb.lib">
       <Filter>资源文件</Filter>
     </Library>

@@ -130,20 +130,18 @@
     <ClCompile Include="..\common\class_aat.cpp" />
     <ClCompile Include="..\common\class_cft.cpp" />
     <ClCompile Include="hw_check.cpp" />
-    <ClCompile Include="hw_check_base.cpp" />
-    <ClCompile Include="hw_check_firstline.cpp" />
+    <ClCompile Include="hw_check_class.cpp" />
     <ClCompile Include="hw_check_main.cpp" />
-    <ClCompile Include="hw_check_secondline.cpp" />
+    <ClCompile Include="hw_check_tools.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\class_aat.h" />
     <ClInclude Include="..\include\class_cft.h" />
     <ClInclude Include="hw_check.h" />
+    <ClInclude Include="hw_check_class.h" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="..\lib_mariadb_x86\libmariadb.lib" />
-    <Library Include="..\lib_mariadb_x86\mariadbclient.lib" />
-    <Library Include="..\lib_mariadb_x86\mysqlservices.lib" />
   </ItemGroup>
   <ItemGroup>
     <None Include="hw_check.conf" />

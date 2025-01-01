@@ -1,714 +1,618 @@
 /* 2352018 大数据 刘彦 */
 #define _CRT_SECURE_NO_WARNINGS
-#include "hw_check.h"
+#include "hw_check_class.h"
 #include "../include/class_aat.h"
 #include "../include/class_cft.h"
 #include "../include_mariadb_x86/mysql/mysql.h"
-const char* CONFGROUPNAME = "[文件目录]";
-const char* CONFITEMNAME = "src_rootdir";
-//const char* DEFSRCROOTDIR = "D:\\homework\\BigHW\\hw_check\\24251-source\\";
-/* 数据库相关常变量 */
-const char* DBGROUPNAME = "[数据库]";
-const char* DBITEM_HOST = "db_host";
-const char* DBITEM_PORT = "db_port";
-const char* DBITEM_NAME = "db_name";
-const char* DBITEM_USERNAME = "db_username";
-const char* DBITEM_PASSWD = "db_passwd";
-const char* DBITEM_CURRTERM = "db_currterm";
-//const char* DEFDB_HOST = "10.80.42.230";
-//const int   DEFDB_PORT = 3306;
-//const char* DEFDB_NAME = "homework";
-//const char* DEFDB_USERNAME = "hwcheck";
-//const char* DEFDB_PASSWD = "hw_CheCk-For24251*oOP";
-//const char* DEFDB_CURRTERM = "2024/2025/1";
 
-/* 通用函数，暂时放在类外 */
-/* 1.检查cmd输入的参数stu是否合法 */
-int  is_stuno_valid(const string& stuno)
+/***************************************************************************
+  函数名称：get_print_first
+  功    能：获取并打印首行
+  输入参数：
+  返 回 值：
+  说    明：
+ ***************************************************************************/
+FILE_SITUATIONS get_print_first(const string& filepath, const string& filename, const Student& student)
 {
-    if (stuno.length() != 7)
-        return 0;
-    for (size_t i = 0; i < stuno.length(); i++)
-        if (stuno[i] < '0' || stuno[i] > '9')
-            return 0;
-    return 1;
-}
-/* 2.检查文件是否为pdf文件 */
-int  is_PDF_file(ifstream& fin)
-{
-    fin.clear();
-    fin.seekg(0, ios::beg);
-    char header[8];
-    fin.read(header, 8);
-    // 检查文件头是否以 "%PDF-1." 开头
-    string pdfHeader(header, 7); // 读取前 7 个字符
-    if (pdfHeader == "%PDF-1.")
+    ifstream fin;
+    string _filepath = filepath;
+    // 检查文件大小
+    FILE_SITUATIONS result = check_file_size(fin, filepath);
+    if (result != PASS)
+        return result; // 如果文件大小不符合要求，直接返回
+    fin.open(_filepath, ios::in | ios::binary); // 以二进制模式打开文件
+    // 检查文件编码
+    result = check_file_encoding(fin);
+    vector<char> firstlinecontent;
+    if (result != PASS)
+        return result; // 如果文件编码错误，返回错误状态
+    // 读取文件首行
+    result = read_first_line(fin, firstlinecontent);
+    if (result != PASS)
+        return result; // 如果读取首行失败，返回错误状态
+    fin.close();
+    string str(firstlinecontent.begin(), firstlinecontent.end()); // 将首行内容转为字符串
+    // 如果首行内容少于2个字符，表示格式不符合要求
+    if (firstlinecontent.size() < 2)
     {
-        char version = header[7];// 读取版本号字符
-        if (version >= '0' && version <= '9')
-            return 1;
+        cout << FILESTATUS_STR[FIRST_LINE_NOT_COMMIT];
+        cout << " [" << str << "]" << endl;
+        return FIRST_LINE_NOT_COMMIT; // 返回首行内容不符合规范的错误
     }
-    return 0;
-}
+    vector<char> comcontent;
+    int comstatus = is_valid_comment(firstlinecontent, comcontent);
+    // 判断注释格式是否合法
+    if (comstatus == (int)FIRST_LINE_NOT_COMMIT)
+    {
+        cout << FILESTATUS_STR[FIRST_LINE_NOT_COMMIT];
+        cout << " [" << str << "]" << endl;
+        return FIRST_LINE_NOT_COMMIT; // 如果注释格式不正确，返回错误
+    }
+    else if (comstatus == (int)FIRST_LINE_ERROR_COMMIT)
+    {
+        cout << "首行不是符合要求的/* */格式 [" << str << "]" << endl;
+        return FIRST_LINE_ERROR_COMMIT; // 如果注释格式错误，返回错误
+    }
+    int have_no = 0, have_major = 0, have_name = 0;
+    vector<string> comitem = split_by_space(comcontent); // 将注释内容按空格拆分成项
+    // 如果注释项不是3个，说明格式错误
+    if (comitem.size() != 3)
+    {
+        cout << FILESTATUS_STR[FIRST_LINE_NOT_3];
+        cout << " [" << str << "]" << endl;
+        return FIRST_LINE_NOT_3; // 注释项个数错误，返回错误
+    }
 
+    /* 对应注释中的学生信息 */
+    auto it = find(comitem.begin(), comitem.end(), student.no);
+    if (it != comitem.end()) // 判断学号是否在注释中
+        have_no = 1;
 
-/* 3.检查源文件是否为UTF-8编码 */
-static int preNUm(unsigned char byte)
-{
-    unsigned char mask = 0x80;
-    int num = 0;
-    for (int i = 0; i < 8; i++)
+    // 处理专业简称中的 | 分隔符
+    size_t delimiter_pos = student.majorshort.find('|');
+    if (delimiter_pos != string::npos)
     {
-        if ((byte & mask) == mask)
-        {
-            mask = mask >> 1;
-            num++;
-        }
-        else
-            break;
+        // 如果有 |，则检查 | 前后的部分是否出现在 comitem 中
+        string part1 = student.majorshort.substr(0, delimiter_pos);
+        string part2 = student.majorshort.substr(delimiter_pos + 1);
+        if (find(comitem.begin(), comitem.end(), part1) != comitem.end() || find(comitem.begin(), comitem.end(), part2) != comitem.end())
+            have_major = 1;
     }
-    return num;
-}
-//int isUTF8(ifstream& fin)
-//{
-//    fin.clear();
-//    fin.seekg(0, ios::beg);
-//    unsigned char ch;
-//    int num = 0;
-//    while (1) 
-//    {
-//        ch = fin.get();
-//        if (fin.eof()) 
-//            break;
-//        if ((ch & 0x80) == 0x00)         // 1字节, 0XXX_XXXX
-//            continue;
-//        else if ((num = preNUm(ch)) > 2) // preNUm返回首个字节8个bits中首个0前面1的个数，该数量也是该字符所使用的字节数
-//        {
-//            ch = fin.get();
-//            if (fin.eof())
-//                break;
-//            for (int j = 0; j < num - 1; j++) 
-//            {
-//                if ((ch & 0xc0) != 0x80) //判断后面num - 1 个字节是不是都是10开头
-//                    return 0;
-//                ch = fin.get();
-//                if (fin.eof())
-//                    break;
-//            }
-//        }
-//        else 
-//            return 0;
-//    }
-//    return 1;
-//}
-int isUTF8(ifstream& fin)
-{
-    unsigned char temp_ch;
-    bool ascii = true;
-    fin.clear();
-    fin.seekg(0, ios::beg);
-    while (1)
-    {
-        temp_ch = fin.get();
-        if (fin.eof())
-            break;
-        if ((temp_ch & 0x80) == 0)          // 1字节
-            ;
-        else if ((temp_ch & 0xe0) == 0xc0)  // 2字节，110xxxxx
-        {
-            temp_ch = fin.get();
-            if (fin.eof())
-                return 0;
-            if ((temp_ch & 0xc0) != 0x80)
-                return 0;
-            ascii = false;
-        }
-        else if ((temp_ch & 0xf0) == 0xe0)  // 3字节，1110xxxx
-        {
-            for (int i = 0; i < 2; i++)
-            {
-                temp_ch = fin.get();
-                if (fin.eof())
-                    return 0;
-                if ((temp_ch & 0xc0) != 0x80)
-                    return 0;
-            }
-            ascii = false;
-        }
-        else if ((temp_ch & 0xf8) == 0xf0)  //4字节，11110xxx
-        {
-            for (int i = 0; i < 3; i++)
-            {
-                temp_ch = fin.get();
-                if (fin.eof())
-                    return 0;
-                if ((temp_ch & 0xc0) != 0x80)
-                    return 0;
-            }
-            ascii = false;
-        }
-        else
-            return 0;
-    }
-    if (ascii)
-        return 0;
     else
-        return 1;
-}
-
-//检查是否有\n
-bool containsNewline(ifstream& fin) {
-
-    char ch;
-    bool hasCR = false;  // 是否发现回车符（\r）
-    bool hasLF = false;  // 是否发现换行符（\n）
-
-    while (fin.get(ch)) {
-        if (ch == '\r') {
-            hasCR = true;  // 找到回车符
-        }
-        else if (ch == '\n') {
-            hasLF = true;  // 找到换行符
-        }
-    }
-
-    // 文件包含 \r 且没有 \n，说明是 Macintosh (CR) 格式
-    if (hasCR && !hasLF) {
-        return false;
-    }
-
-    return true;
-}
-
-/* 4.判断文件的种类:1.源程序文件;2.PDF文件;3.非pdf且非源程序文件的文件 */
-int get_file_kind(const string& filename)
-{
-    size_t len = filename.length();
-    size_t dotPos = string::npos;
-
-    // 手动查找文件名中最后一个点的位置
-    for (int i = len - 1; i >= 0; i--)
     {
-        if (filename[i] == '.')
+        // 如果没有 |，直接查找整个专业简称
+        it = find(comitem.begin(), comitem.end(), student.majorshort);
+        if (it != comitem.end())
+            have_major = 1;
+    }
+
+    it = find(comitem.begin(), comitem.end(), student.majorfull);
+    if (it != comitem.end()) // 检查全称专业是否匹配
+        have_major = 1;
+
+    it = find(comitem.begin(), comitem.end(), student.name);
+    if (it != comitem.end()) // 检查姓名是否匹配
+        have_name = 1;
+
+    // 检查学号、专业和姓名是否匹配
+    if ((have_no + have_major + have_name) == 3)
+    {
+        cout << FILESTATUS_STR[PASS] << endl;
+        return PASS; // 如果所有信息匹配，返回PASS
+    }
+    else
+    {
+        cout << "首行";
+        if (!have_no)
+            cout << NOT_MATCH[0];
+        if (!have_name)
+            cout << NOT_MATCH[1];
+        if (!have_major)
+            cout << NOT_MATCH[2];
+        cout << " [" << str << "]" << endl;
+        return FIRST_LINE_CHECK_ERROR; // 如果有信息不匹配，返回错误
+    }
+}
+
+/***************************************************************************
+  函数名称：get_print_second
+  功    能：获取并打印次行
+  输入参数：
+  返 回 值：
+  说    明：
+ ***************************************************************************/
+FILE_SITUATIONS get_print_second(const string& filepath, vector<Student>& check_stulist, const string& own_no)
+{
+    ifstream fin;
+    string _filepath = filepath;
+    // 检查文件大小
+    FILE_SITUATIONS result = check_file_size(fin, filepath);
+    if (result != PASS)
+        return result; // 如果文件大小不符合要求，直接返回
+    fin.open(_filepath, ios::in | ios::binary); // 以二进制模式打开文件
+    // 检查文件编码
+    if (is_UTF8_file(fin)) // 一定是sourcefile，但需要判断是否符合GB编码
+    {
+        cout << FILESTATUS_STR[NOT_GB] << endl;
+        fin.close();
+        return NOT_GB; // 如果文件编码不符合要求，返回编码错误
+    }
+    fin.clear();
+    fin.seekg(0, ios::beg);
+
+    string line;
+    size_t line_count = 0;
+    while (getline(fin, line))
+    {
+        line_count++;
+        if (line_count > 1)
+            break; // 如果发现多于一行，立即结束循环
+    }
+    if (line_count <= 1)
+    {
+        fin.close();
+        cout << FILESTATUS_STR[SECOND_LINE_ERROR] << endl; // 次行其它错误
+        return SECOND_LINE_ERROR; // 文件内容少于两行，返回错误
+    }
+    fin.clear();
+    fin.seekg(0, ios::beg);
+    //循环读，直到找到两行不空
+    vector<char> line_content, firstlinecontent, secondlinecontent;
+    line_count = 0;
+    while (!fin.eof())
+    {
+        if (read_and_clean_line(fin, line_content))
         {
-            dotPos = i;
-            break;
-        }
-    }
-    if (dotPos != string::npos) {
-        string extension = filename.substr(dotPos + 1);
-        // 将扩展名转换为小写字母以进行比较
-        for (char& c : extension)
-            c = tolower(c);
-        if (extension == "h" || extension == "hpp" || extension == "c" || extension == "cpp")
-            return SOURCEFILE;
-        else if (extension == "pdf")
-            return PDFFILE;
-        else
-            return OTHERFILE;
-    }
-    return ERRORFILE; // 找不到文件名中的'.'，返回ERRORFILE
-}
-/* 5.忽视左右空格 */
-void trim_left(vector<char>& line_content)
-{
-    while (!line_content.empty() && (line_content.front() == ' ' || line_content.front() == '\t'))
-        line_content.erase(line_content.begin());
-}
-void trim_right(vector<char>& line_content)
-{
-    while (!line_content.empty() && (line_content.back() == ' ' || line_content.back() == '\t'))
-        line_content.pop_back();
-}
-/* 6.是否为合法注释 */
-int  is_validcomment(const vector<char>& firstlinecontent, vector<char>& comcontent)
-{
-    // 检测单行注释
-    if (firstlinecontent[0] == '/' && firstlinecontent[1] == '/')
-    {
-        size_t startIdx = 2;
-        comcontent.assign(firstlinecontent.begin() + startIdx, firstlinecontent.end());
-        return 1; // 合法的单行注释（不考虑内容）
-    }
-    /* 检测多行注释 */
-    size_t len = firstlinecontent.size();
-    if (firstlinecontent[0] == '/' && firstlinecontent[1] == '*')
-    {
-        if (firstlinecontent[len - 1] == '/' && firstlinecontent[len - 2] == '*')
-        {
-            size_t startIdx = 2;
-            comcontent.assign(firstlinecontent.begin() + startIdx, firstlinecontent.end() - 2);
-            return 1; // 合法的多行注释（不考虑内容）
-        }
-        else
-            return (int)FIRSTCOMERR; // 多行注释格式不正确
-    }
-    return (int)FIRSTNOTCOM; // 首行不是注释行
-}
-/* 7.按空格划分字符串 */
-vector<string> splitBySpace(const vector<char>& comcontent)
-{
-    string str(comcontent.begin(), comcontent.end());
-    // 使用 stringstream 分割字符串
-    stringstream ss(str);
-    istream_iterator<string> begin(ss), end;
-    vector<string> result(begin, end);
-    return result;
-}
-
-/* Student类的实现 */
-Student::Student(const string& s1, const string& s2, const string& s3, const string& s4, const string& s5, const string& s6, const string& s7, const string& s8)
-{
-    term = s1;
-    grade = s2;
-    no = s3;
-    name = s4;
-    sex = s5;
-    majorfullname = s6;
-    majorshortname = s7;
-    cno = s8;
-}
-Student::Student()
-{
-    term = "";
-    grade = "";
-    no = "";
-    name = "";
-    sex = "";
-    majorfullname = "";
-    majorshortname = "";
-    cno = "";
-}
-
-/* HW类的实现 */
-HW::HW(const string& s1, const string& s2, const string& s3, const string& s4, const string& s5, const string& s6, const string& s7)
-{
-    kind = s1;
-    cno = s2;
-    number = s3;
-    chapter = s4;
-    week = s5;
-    filename = s6;
-    point = s7;
-}
-
-/* Db_conf类的实现 */
-/* 读hw_check.conf配置文件，参数是配置文件名，外部传入 */
-int  Db_cnof::read_db_config(const string& cfgfile)
-{
-    string _cfgfile = cfgfile;
-    replace(_cfgfile.begin(), _cfgfile.end(), '\\', '/'); // 替换
-    config_file_tools cf(_cfgfile);
-    if (!cf.is_read_succeeded())
-    {
-        cerr << "无法打开配置文件[" << cfgfile << "]，结束运行." << endl;
-        return 0;
-    }
-    /* 读取src_rootdir */
-    if (cf.item_get_string(CONFGROUPNAME, CONFITEMNAME, Db_cnof::srcrootdir) < 0)
-    {
-        cerr << "取配置文件 [" << cfgfile << "] 的" << CONFGROUPNAME << "组的[" << CONFITEMNAME << "]项的值出错." << endl;
-        return 0;
-    }
-    /* 读取数据库相关参数 */
-    if (cf.item_get_string(DBGROUPNAME, DBITEM_HOST, Db_cnof::dbhost) < 0)
-    {
-        cerr << "取配置文件 [" << cfgfile << "] 的" << DBGROUPNAME << "组的[" << DBITEM_HOST << "]项的值出错." << endl;
-        return 0;
-    }
-    if (cf.item_get_int(DBGROUPNAME, DBITEM_PORT, Db_cnof::dbport) < 0)
-    {
-        cerr << "取配置文件 [" << cfgfile << "] 的" << DBGROUPNAME << "组的[" << DBITEM_PORT << "]项的值出错." << endl;
-        return 0;
-    }
-    if (cf.item_get_string(DBGROUPNAME, DBITEM_NAME, Db_cnof::dbname) < 0)
-    {
-        cerr << "取配置文件 [" << cfgfile << "] 的" << DBGROUPNAME << "组的[" << DBITEM_NAME << "]项的值出错." << endl;
-        return 0;
-    }
-    if (cf.item_get_string(DBGROUPNAME, DBITEM_USERNAME, Db_cnof::dbusername) < 0)
-    {
-        cerr << "取配置文件 [" << cfgfile << "] 的" << DBGROUPNAME << "组的[" << DBITEM_USERNAME << "]项的值出错." << endl;
-        return 0;
-    }
-    if (cf.item_get_string(DBGROUPNAME, DBITEM_PASSWD, Db_cnof::dbpasswd) < 0)
-    {
-        cerr << "取配置文件 [" << cfgfile << "] 的" << DBGROUPNAME << "组的[" << DBITEM_PASSWD << "]项的值出错." << endl;
-        return 0;
-    }
-    if (cf.item_get_string(DBGROUPNAME, DBITEM_CURRTERM, Db_cnof::dbcurrterm) < 0)
-    {
-        cerr << "取配置文件 [" << cfgfile << "] 的" << DBGROUPNAME << "组的[" << DBITEM_CURRTERM << "]项的值出错." << endl;
-        return 0;
-    }
-    return 1;
-}
-
-/* hw_check类的部分实现 */
-/* 1.读取命令行参数，检测并写入hwcheck对象中 */
-int  hw_check::read_hwcheck_cmdpara(const args_analyse_tools* const args)
-{
-    if (args[OPT_ARGS_STU].get_string() != "all")
-    {
-        if (!is_stuno_valid(args[OPT_ARGS_STU].get_string()))
-        {
-            cout << "文件[" << args[OPT_ARGS_STU].get_string() << "]无法打开." << endl;
-            cout << endl;
-            cout << "[--严重错误--] 读取 [--stu] 指定的文件出错." << endl;
-            return STUNOERROR;
-        }
-    }
-    if (args[OPT_ARGS_CNO].get_string().length() != 8 && args[OPT_ARGS_CNO].get_string().length() != 13)
-    {
-        cout << "课号不是8/13位" << endl;
-        return CNOERROR;
-    }
-    // 暂时认为其它参数正确，会在后续读取数据库时检测
-    this->action = args[OPT_ARGS_ACTION].get_string();
-    this->cno = args[OPT_ARGS_CNO].get_string();
-    this->stu = args[OPT_ARGS_STU].get_string();
-    this->file = args[OPT_ARGS_FILE].get_string();
-    this->chapter = args[OPT_ARGS_CHAPTER].existed() ? args[OPT_ARGS_CHAPTER].get_int() : -1;
-    this->week = args[OPT_ARGS_WEEK].existed() ? args[OPT_ARGS_WEEK].get_int() : -1;
-    this->cfgfile = args[OPT_ARGS_CFGFILE].get_string();
-    this->display = args[OPT_ARGS_DISPLAY].get_string();
-    return 1;
-}
-/* 2.从数据库中读出：对应课号的对应学生的学生数据；对应课号的对应章节和周的文件数据 */
-int  hw_check::read_db_content()
-{
-    MYSQL* mysql;
-    MYSQL_RES* result;
-    MYSQL_ROW  row;
-    /* 初始化 mysql 变量，失败返回NULL */
-    if ((mysql = mysql_init(NULL)) == NULL) {
-        cerr << "mysql_init failed" << endl;
-        return 0;
-    }
-    /* 连接数据库，失败返回NULL */
-    if (mysql_real_connect(mysql, dbhost.c_str(), dbusername.c_str(), dbpasswd.c_str(), dbname.c_str(), dbport, NULL, 0) == NULL) {
-        cerr << "mysql_real_connect failed(" << mysql_error(mysql) << ")" << endl;
-        return 0;
-    }
-    /* 设置字符集，否则读出的字符乱码 */
-    mysql_set_character_set(mysql, "gbk");
-    /* 查询hwlist并保存，查询对应cno的chapter和week */
-    string sql_hwquery_command = "select * from view_hwcheck_hwlist";
-    sql_hwquery_command = sql_hwquery_command + " where hw_cno = " + cno;
-    if (mysql_query(mysql, sql_hwquery_command.c_str())) {
-        cerr << "mysql_query failed(" << mysql_error(mysql) << ")" << endl;
-        return 0;
-    }
-    if ((result = mysql_store_result(mysql)) == NULL) {
-        cout << "mysql_store_result failed" << endl;
-        return 0;
-    }
-    if ((int)mysql_num_rows(result) <= 0) {
-        cerr << "mysql execute [call proc_hwcheck_get_stulist_for_multifile" << "(\"" << dbcurrterm << "\", \"" << cno << "\"); ] 查询到符合要求的记录为[0]." << endl;
-        mysql_free_result(result);
-        mysql_close(mysql);
-        return 0;
-    }
-    mysql_free_result(result);
-    if (chapter != -1)
-        sql_hwquery_command = sql_hwquery_command + " and hw_chapter = " + to_string(chapter);
-    if (week != -1)
-        sql_hwquery_command = sql_hwquery_command + " and hw_week = " + to_string(week);
-    if (mysql_query(mysql, sql_hwquery_command.c_str())) {
-        cerr << "mysql_query failed(" << mysql_error(mysql) << ")" << endl;
-        return 0;
-    }
-    if ((result = mysql_store_result(mysql)) == NULL) {
-        cerr << "mysql_store_result failed" << endl;
-        return 0;
-    }
-    //if ((int)mysql_num_rows(result) <= 0) {
-    //    cerr << "本次操作的学生数量为0/文件数量为0，未执行" << endl;
-    //    mysql_free_result(result);
-    //    mysql_close(mysql);
-    //    return 0;
-    //}
-    while ((row = mysql_fetch_row(result)) != NULL) {
-        HW hw(row[0], row[1], row[2], row[3], row[4], row[5], row[6]);
-        hwlist.push_back(hw);
-    }
-    mysql_free_result(result);
-    /* 查询stulist并保存，查找对应cno的stu */
-    string sql_stuquery_command = "select * from view_hwcheck_stulist";
-    sql_stuquery_command = sql_stuquery_command + " where stu_cno = " + cno;
-    if (stu != "all")
-        sql_stuquery_command = sql_stuquery_command + " and stu_no = " + stu;
-    if (mysql_query(mysql, sql_stuquery_command.c_str())) {
-        cerr << "mysql_query failed(" << mysql_error(mysql) << ")" << endl;
-        return 0;
-    }
-    if ((result = mysql_store_result(mysql)) == NULL) {
-        cerr << "mysql_store_result failed" << endl;
-        return 0;
-    }
-    //if ((int)mysql_num_rows(result) <= 0) {
-    //    cerr << "本次操作的学生数量为0/文件数量为0，未执行" << endl;
-    //    mysql_free_result(result);
-    //    mysql_close(mysql);
-    //    return 0;
-    //}
-    while ((row = mysql_fetch_row(result)) != NULL) {
-        Student stu(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7]);
-        stulist.push_back(stu);
-    }
-    mysql_free_result(result);
-    /* 关闭整个连接 */
-    mysql_close(mysql);
-
-    /* checkfirst需要对读到的文件进行处理 */
-    if (this->action == "firstline")
-    {
-        if (this->file == "all")
-        {
-            for (auto it = hwlist.begin(); it != hwlist.end();)
+            ++line_count;
+            if (line_count == 1)
+                firstlinecontent = line_content; // 记录首行内容
+            else if (line_count == 2)
             {
-                if (get_file_kind(it->filename) != SOURCEFILE)
-                    it = hwlist.erase(it);
-                else
-                    ++it;
+                secondlinecontent = line_content; // 记录次行内容
+                break;
             }
         }
+        if (fin.eof())
+        {
+            cout << FILESTATUS_STR[LESS_THAN_2_LINE] << endl; // 文件小于两行
+            fin.close();
+            return LESS_THAN_2_LINE; // 文件内容少于两行，返回错误
+        }
+    }
+    fin.close();
+    // 对次行进行检测 
+    if (secondlinecontent.size() < 2)
+    {
+        cout << FILESTATUS_STR[SECOND_LINE_NOT_COMMIT] << endl;
+        return SECOND_LINE_NOT_COMMIT; // 次行内容不符合注释格式
+    }
+    vector<char> comcontent;
+    int comstatus = is_valid_comment(secondlinecontent, comcontent); // 检查次行是否为有效注释
+    if (comstatus == (int)FIRST_LINE_NOT_COMMIT || comstatus == (int)FIRST_LINE_ERROR_COMMIT)
+    {
+        cout << FILESTATUS_STR[SECOND_LINE_NOT_COMMIT] << endl; // 次行不是注释
+        return SECOND_LINE_NOT_COMMIT;
+    }
+    vector<string> comitem = split_by_space(comcontent); // 拆分注释内容
+    // 得到互验学生名单
+    FILE_SITUATIONS status = validate_student_info(comitem, own_no, check_stulist); // 验证学生信息
+    if (status != PASS) return status;  // 如果学生信息验证失败，则返回错误
+
+    cout << FILESTATUS_STR[PASS] << endl;
+    return PASS; // 如果验证通过，返回PASS
+}
+
+/***************************************************************************
+  函数名称：cross_check
+  功    能：交叉检查
+  输入参数：
+  返 回 值：
+  说    明：
+ ***************************************************************************/
+void hw_check::cross_check(const vector<vector<Student>>& total_check_stulist, const vector<Student>& total_stulist)
+{
+    cout << "交叉检查结果：" << endl;
+    for (size_t i = 0; i < total_stulist.size(); i++) // i是当前检测的学生
+    {
+        if (cno == "10108001" || cno == "10108002" || cno == "5000244001602")
+            cout << setw(3) << i + 1 << ": " << cno << "-" << total_stulist[i].no << "-" << total_stulist[i].name << endl;
         else
         {
-            if (get_file_kind(this->file) != SOURCEFILE)
+            if (i + 1 < 88)
+                cout << setw(3) << i + 1 << ": " << 10108001 << "-" << total_stulist[i].no << "-" << total_stulist[i].name << endl;
+            else
+                cout << setw(3) << i + 1 << ": " << 10108002 << "-" << total_stulist[i].no << "-" << total_stulist[i].name << endl;
+        }
+        for (size_t j = 0; j < total_check_stulist[i].size(); j++) // j是和你互验的学生
+        {
+            cout << '\t' << total_check_stulist[i][j].no << " " << total_check_stulist[i][j].name << '\t';
+            size_t k = 0;
+            for (; k < total_stulist.size(); k++) // k是互验学生在total_stulist中的序号
+                if (total_stulist[k].no == total_check_stulist[i][j].no)
+                    break;
+            if (k == total_stulist.size())
+                cout << CROSS_ERROR[NO] << endl;
+            else
             {
-                cerr << "首行检查的文件[" << this->file << "]必须是源程序文件." << endl;
-                return 0;
+                if (total_stulist[k].name != total_check_stulist[i][j].name)
+                {
+                    cout << CROSS_ERROR[NAME] << endl;
+                    continue;
+                }
+                size_t m = 0;
+                for (; m < total_check_stulist[k].size(); m++) // 遍历对方的check_list，看有没有你
+                {
+                    if (total_check_stulist[k][m].no == total_stulist[i].no) // 学号对
+                    {
+                        if (total_check_stulist[k][m].name != total_stulist[i].name) // 姓名错
+                            cout << CROSS_ERROR[CORRECT] << endl;
+                        else
+                            cout << endl; // 姓名对，下一行
+                        break;
+                    }
+                }
+                if (m == total_check_stulist[k].size())
+                    cout << CROSS_ERROR[ABANDON] << endl;
             }
         }
     }
-    else if (this->action == "secondline")
+}
+
+/***************************************************************************
+  函数名称：validate_student_info
+  功    能：验证学生信息
+  输入参数：
+  返 回 值：
+  说    明：
+ ***************************************************************************/
+FILE_SITUATIONS validate_student_info(const vector<string>& comitem, const string& own_no, vector<Student>& check_stulist)
+{
+    for (size_t i = 0; i < comitem.size(); i = i + 2)
     {
-        if (get_file_kind(this->file) != SOURCEFILE)
+        if (i >= comitem.size() - 1) // 仅在结尾处出现此错误
         {
-            cerr << "次行检查的文件[" << this->file << "]必须是源程序文件." << endl;
-            return 0;
+            cout << "第[" << i / 2 << "]个学生后面的信息不全(只读到一项)，后续内容忽略" << endl;
+            return OTHER_ERROR;
         }
+
+        string stu_no = comitem[i], stu_name = comitem[i + 1];
+
+        // 学号长度检查
+        if (stu_no.length() != 7)
+        {
+            cout << "第" << i / 2 + 1 << "位同学的学号[" << stu_no << "]不是7位，后续内容忽略" << endl;
+            return OTHER_ERROR;
+        }
+
+        // 学号有效性检查
+        if (!is_stu_valid(stu_no))
+        {
+            cout << "第" << i / 2 + 1 << "位同学的学号[" << stu_no << "]中有非数字存在，后续内容忽略" << endl;
+            return OTHER_ERROR;
+        }
+
+        // 避免写自己的信息
+        if (stu_no == own_no)
+        {
+            cout << "第[" << i / 2 + 1 << "]项写了自己，后续内容忽略" << endl;
+            return OTHER_ERROR;
+        }
+
+        // 添加到学生名单中
+        Student temp_check_stu;
+        temp_check_stu.no = stu_no;
+        temp_check_stu.name = stu_name;
+        check_stulist.push_back(temp_check_stu);
     }
 
-    return 1;
+    return PASS; // 所有学生信息验证通过
 }
-/* 3.得到stulist中的最大长度 */
-int  hw_check::maxstunamelen()
+
+/***************************************************************************
+  函数名称：print_hw_check_result
+  功    能：打印检查结果
+  输入参数：
+  返 回 值：
+  说    明：
+ ***************************************************************************/
+void hw_check::print_hw_check_result(int choice, const int file_status[], const int total_num[])
 {
-    int maxlen = 0;
-    for (size_t i = 0; i < this->stulist.size(); i++)
-    {
-        int templen = this->stulist[i].name.length();
-        maxlen = max(maxlen, templen);
-    }
-    return maxlen;
-}
-/* 4.得到hwlist中的最大长度 */
-int  hw_check::maxhwfilelen()
-{
-    int maxlen = 0;
-    for (size_t i = 0; i < this->hwlist.size(); i++)
-    {
-        int templen = this->hwlist[i].filename.length();
-        maxlen = max(maxlen, templen);
-    }
-    return maxlen;
-}
-/* 5.choice分为三个，0代表file!=all的结尾;1代表file==all的每个学生;2代表file==all的结尾 */
-void hw_check::print_hw_check_result(int choice, const int filestatus_num[], const int total_filestatus_num[])
-{
+    // 用于存储最大状态字符串长度
     size_t maxlen = 0, filestatus_cnt = 0;
-    int  secondlinestatus_set[] = { 0, 1, 4, 3, 11, 12, 13, 14 , -1 };
+    // 包含secondline操作时的状态码
+    int secondlinestatus_set[] = { PASS, NOT_SUBMIT, NOT_GB, NOT_WIN, LESS_THAN_2_LINE, SECOND_LINE_NOT_COMMIT, SECOND_LINE_ERROR, OTHER_ERROR , -1 };
+
+    // 根据action的值，设置filestatus_cnt，即需要处理的文件状态数量
     if (this->action == "base")
         filestatus_cnt = 5;
     else if (this->action == "firstline")
         filestatus_cnt = 11;
     else if (this->action == "secondline")
         filestatus_cnt = 15;
+
+    // 计算最大状态字符串长度，以便对齐输出
     for (size_t i = 0; i < filestatus_cnt; i++)
     {
-        if (this->action != "base" && i == 2)
+        if (should_skip_status(i, secondlinestatus_set, this->action))
             continue;
-        if (this->action == "secondline")
-        {
-            size_t j = 0;
-            for (; secondlinestatus_set[j] != -1; j++)
-            {
-                if (i == secondlinestatus_set[j])
-                    break;
-            }
-            if (secondlinestatus_set[j] == -1)
-                continue;
-        }
-        if ((choice == 1 || choice == 0) && filestatus_num[i] != 0)
+        if ((choice == STUDENT_OF_ALL || choice == END_OF_NOT_ALL) && file_status[i] != 0)
             maxlen = max(FILESTATUS_STR[i].length(), maxlen);
-        if (choice == 2 && total_filestatus_num[i] != 0)
+        if (choice == END_OF_ALL && total_num[i] != 0)
             maxlen = max(FILESTATUS_STR[i].length(), maxlen);
     }
+
+    // 设置输出格式为右对齐，并定义填充字符
     cout << setiosflags(ios::right);
     char setfill_char = '=';
-    int  setw_word = 2, setw_seg = 12;
-    if (choice == 1)
+    // 设置宽度和填充字符，根据choice的值调整
+    int setw_word = 2, setw_seg = 12;
+    if (choice == STUDENT_OF_ALL)
         setfill_char = '-';
     cout << setfill(setfill_char) << setw(setw_seg + maxlen) << setfill_char << endl;
-    if (choice == 0)
-        cout << "详细信息" << endl;
-    else if (choice == 1)
-        cout << "学生详细信息" << endl;
-    else if (choice == 2)
-        cout << "整体详细信息" << endl;
+    // 打印学生信息标题
+    cout << STUDENT_INFORMATION[choice] << endl;
     cout << setfill(setfill_char) << setw(setw_seg + maxlen) << setfill_char << endl;
+    // 重置填充字符为默认空格
     cout << setfill(' ');
+
+    // 遍历并打印每个文件状态的数量
     for (size_t i = 0; i <= filestatus_cnt; i++)
     {
-        if (this->action != "base" && i == 2)
-            continue; // 除base外，不是PDF
-        if (this->action == "secondline")
+        if (should_skip_status(i, secondlinestatus_set, this->action))
+            continue;
+        // 如果是END_OF_ALL并且total_num[i]不为0，则打印总数
+        if (choice == END_OF_ALL && total_num[i] != 0)
         {
-            size_t j = 0;
-            for (; secondlinestatus_set[j] != -1; j++)
-            {
-                if (i == secondlinestatus_set[j])
-                    break;
-            }
-            if (secondlinestatus_set[j] == -1)
-                continue;
-        }
-        if (choice == 2 && total_filestatus_num[i] != 0)
-        {
-            //if (i == PASS)
-            //    cout << "00000-----";
             cout << setw(maxlen + setw_word) << FILESTATUS_STR[i] << " : ";
-            cout << total_filestatus_num[i] << endl;
+            cout << total_num[i] << endl;
         }
-        if ((choice == 1 || choice == 0) && filestatus_num[i] != 0)
+        // 如果是STUDENT_OF_ALL或END_OF_NOT_ALL并且file_status[i]不为0，则打印每个学生的状态数量
+        if ((choice == STUDENT_OF_ALL || choice == END_OF_NOT_ALL) && file_status[i] != 0)
         {
-            if (this->action == "secondline") // 需要对secondline进行特殊处理
+            // 如果action是"secondline"，需要特殊处理OTHER_ERROR状态
+            if (this->action == "secondline")
             {
-                if (i == OTHERERR)
+                if (i == OTHER_ERROR)
                     continue; // 与PASS合并，不需要单独打印
                 cout << setw(maxlen + setw_word) << FILESTATUS_STR[i] << " : ";
-                int temp = filestatus_num[OTHERERR];
+                int temp = file_status[OTHER_ERROR];
                 if (temp < 0)
                     temp = 0;
                 if (i == PASS) {
-                    cout << filestatus_num[i] + temp << endl;
+                    cout << file_status[i] + temp << endl;
                 }
                 else
-                    cout << filestatus_num[i] << endl;
+                    cout << file_status[i] << endl;
             }
             else
             {
                 cout << setw(maxlen + setw_word) << FILESTATUS_STR[i] << " : ";
-                cout << filestatus_num[i] << endl;
+                cout << file_status[i] << endl;
             }
         }
     }
+    // 打印底部分隔线。
     cout << setfill(setfill_char) << setw(setw_seg + maxlen) << setfill_char << endl;
+    // 重置输出格式为左对齐，并重置填充字符为默认空格。
     cout << resetiosflags(ios::right) << setiosflags(ios::left);
     cout << setfill(' ');
 }
-/* 6.hw_check最重要的检测函数，三合一 */
-int  hw_check::hw_check_threeinone()
+
+/***************************************************************************
+  函数名称：hw_check_all
+  功    能：总检测函数
+  输入参数：
+  返 回 值：
+  说    明：
+ ***************************************************************************/
+int hw_check::hw_check_all()
 {
-    /* 1.得到最大学生和文件长度，控制输出格式 */
-    int Maxstulen = maxstunamelen();
-    int Maxhwfilelen = maxhwfilelen();
+    // 用于存储学生姓名的最大长度
+    int max_stu_length = 0;
+    // 遍历学生列表stulist，计算每个学生姓名的最大长度
+    for (size_t i = 0; i < this->stulist.size(); i++)
+    {
+        int templen = this->stulist[i].name.length();
+        max_stu_length = max(max_stu_length, templen);
+    }
+
+    // 用于存储作业文件名的最大长度
+    int max_hwfile_length = 0;
+    // 遍历hwlist，计算每个文件名的最大长度
+    for (size_t i = 0; i < this->hwlist.size(); i++)
+    {
+        int templen = this->hwlist[i].filename.length();
+        max_hwfile_length = max(max_hwfile_length, templen);
+    }
+
     cout << setiosflags(ios::left);
-    /* 2.得到对应的filepath */
-    bool file_is_all = this->file == "all" ? true : false; // 根据file是否为all分类，是all需要遍历数据库中所有filename
+    // 用于存储分割后的课号
+    vector<string> cnos;
+    // 使用stringstream和getline函数分割传入的课号字符串cno
+    stringstream ss(cno);
+    string temp_cno;
+    while (getline(ss, temp_cno, ','))
+    {
+        // 移除每个课号前后的空格
+        temp_cno.erase(remove(temp_cno.begin(), temp_cno.end(), ' '), temp_cno.end());
+        cnos.push_back(temp_cno);
+    }
+
+    // 判断是否需要检查所有文件或学生
+    bool file_is_all = this->file == "all" ? true : false;
+    bool stu_is_all = this->stu == "all" ? true : false;
+    // 计数学生数量
     int stunum_cnt = 0;
-    int filestatus_num[FILESTATUS_NUM] = { 0 };
-    int total_filestatus_num[FILESTATUS_NUM] = { 0 };
-    vector<vector<Student>> total_check_stulist; // 次行的所有互验学生名单
+    // 记录文件状态的数量
+    int file_status[FILE_STATUS_NUM] = { 0 };
+    // 记录总的文件状态数量
+    int total_num[FILE_STATUS_NUM] = { 0 };
+    // 存储所有互验学生名单
+    vector<vector<Student>> total_check_stulist;
+
+    // 如果不是检查所有文件，输出当前课号、学生数量和源文件名
     if (!file_is_all)
         cout << "课号 : " << cno << " 学生数量 : " << stulist.size() << " 源文件名 : " << this->file << endl;
-    for (const auto& student : this->stulist) // 遍历学生
-    {
-        if (file_is_all)
-            cout << setw(3) << ++stunum_cnt << ": 学号-" << student.no << " 姓名-" << replaceDot(student.name) << " 课号-" << student.cno << " 文件数量-" << hwlist.size() << endl;//***
-        else
-            cout << setw(3) << ++stunum_cnt << ": " << student.no << "/" << setw(Maxstulen) << replaceDot(student.name) << " : ";   //**********
-        for (const auto& hwfile : this->hwlist) // 遍历作业
+
+    // 遍历所有课号和学生，检查每个学生的作业文件
+    for (const auto& current_cno : cnos) {
+        for (const auto& student : this->stulist)
         {
-            string filepath = srcrootdir;
-            filepath = filepath + student.cno + "-" + student.no + "\\";
-            filepath += file_is_all ? hwfile.filename : this->file;
-            string filename = file_is_all ? hwfile.filename : this->file;
+            // 如果当前学生的课号不匹配，跳过
+            if (student.cno != current_cno)
+                continue;
+            // 打印学生信息。
+            print_student_info(student, file_is_all, stu_is_all, stunum_cnt, max_stu_length, student.cno == "5000244001602");
+
+            // 遍历作业文件列表，检查每个文件的状态
+            for (const auto& hwfile : this->hwlist)
+            {
+                // 构造文件路径
+                string filepath = src_rootdir + student.cno + "-" + student.no + "/" + (file_is_all ? hwfile.filename : this->file);
+                if (file_is_all)
+                    cout << "  " << setw(max_hwfile_length) << hwfile.filename << " : ";
+                // 检查文件状态并记录
+                FILE_SITUATIONS filestatus = check_and_record_file_status(filepath, file_is_all ? hwfile.filename : this->file, student, total_check_stulist);
+                ++file_status[filestatus];
+                // 如果不是检查所有文件，跳出循环
+                if (!file_is_all) break;
+            }
+
+            // 如果需要检查所有文件，更新总的文件状态数量并打印结果
             if (file_is_all)
-                cout << "  " << setw(Maxhwfilelen) << hwfile.filename << " : ";
-            /* 检查每个文件的状态 */
-            FILE_STATUS filestatus;
-            if (this->action == "base")
             {
-                filestatus = get_basefilestatus(filepath, filename);
-                print_basefilestatus(filestatus);
+                for (size_t i = 0; i < FILE_STATUS_NUM; i++)
+                    total_num[i] += file_status[i];
+                print_file_check_result(file_status[PASS], hwlist.size());
+                print_hw_check_result(1, file_status, total_num);// 打印信息1
+                // 重置file_status数组
+                memset(file_status, 0, sizeof(file_status));
+                cout << endl;
             }
-            else if (this->action == "firstline")
-            {
-                filestatus = getaprint_firfilestatus(filepath, filename, student);
-            }
-            else if (this->action == "secondline")
-            {
-                vector<Student> check_stulist; // 次行的互验学生名单
-                filestatus = getaprint_secfilestatus(filepath, check_stulist, student.no);
-                if (filestatus == OTHERERR)
-                    filestatus = PASS; // 特殊判断
-                total_check_stulist.push_back(check_stulist);
-            }
-            ++filestatus_num[filestatus];
-            if (!file_is_all)
-                break; // 如果file不是all，内循环只执行一次
-        }
-        if (file_is_all)
-        {
-            /*total_filestatus_num[NOTSUBMIT] += filestatus_num[NOTSUBMIT], total_filestatus_num[PASS] += filestatus_num[PASS];
-            total_filestatus_num[ERRPDF] += filestatus_num[ERRPDF], total_filestatus_num[NOTGB] += filestatus_num[NOTGB];*/
-            for (size_t i = 0; i < FILESTATUS_NUM; i++)
-                total_filestatus_num[i] += filestatus_num[i];
-            if (filestatus_num[PASS] == (int)hwlist.size())
-                cout << "全部通过" << filestatus_num[PASS] << "/" << hwlist.size() << "个文件，本次通过" << filestatus_num[PASS] << "个" << endl;
-            else
-                cout << "检查通过" << filestatus_num[PASS] << "/" << hwlist.size() << "个文件，本次通过" << filestatus_num[PASS] << "个" << endl;
-            print_hw_check_result(1, filestatus_num, total_filestatus_num);// 打印信息1
-            memset(filestatus_num, 0, sizeof(filestatus_num));
-            cout << endl;
         }
     }
     cout << endl;
+
+    // 如果需要检查所有文件，输出总的检查结果
     if (file_is_all)
     {
-        cout << "共完成" << stulist.size() << "个学生的检查，文件总数:" << stulist.size() * hwlist.size() << "，通过总数:" << total_filestatus_num[PASS] << "，本次通过" << total_filestatus_num[PASS] << "个" << endl;
-        print_hw_check_result(2, filestatus_num, total_filestatus_num); // 打印信息2
-        //cout << endl;
+        cout << "共完成" << stulist.size() << "个学生的检查，文件总数:" << stulist.size() * hwlist.size() << "，通过总数:" << total_num[PASS] << "，本次通过" << total_num[PASS] << "个" << endl;
+        print_hw_check_result(2, file_status, total_num); // 打印信息2
     }
     else
     {
-        if (filestatus_num[PASS] == this->stulist.size())
-            cout << "全部通过" << filestatus_num[PASS] << "/" << stulist.size() << "个学生，本次通过" << filestatus_num[PASS] << "个" << endl;
-        else
-            cout << "检查通过" << filestatus_num[PASS] << "/" << stulist.size() << "个学生，本次通过" << filestatus_num[PASS] << "个" << endl;
-        print_hw_check_result(0, filestatus_num, total_filestatus_num); // 打印信息0
+        // 如果不是检查所有文件，只输出文件检查结果
+        print_file_check_result(file_status[PASS], stulist.size());
+        print_hw_check_result(0, file_status, total_num); // 打印信息0
     }
     cout << endl;
+
     if (this->action == "secondline")
     {
-        Stucrossheck(total_check_stulist, stulist);
+        cross_check(total_check_stulist, stulist);
         cout << endl;
     }
+
     return 0;
 }
 
-string replaceDot(const string& input)
+/***************************************************************************
+  函数名称：should_skip_status
+  功    能：
+  输入参数：
+  返 回 值：
+  说    明：
+ ***************************************************************************/
+bool hw_check::should_skip_status(int i, const int secondlinestatus_set[], const std::string& action)
 {
-    string result = input;
+    // 如果 action 不是 "base" 且 i == 2，跳过
+    if (action != "base" && i == 2)
+        return true;
 
-    // 使用string的find和replace方法，处理替换
-    size_t pos = 0;
-    while ((pos = result.find("·", pos)) != string::npos) {
-        result.replace(pos, 2, ".");  // "·"占2个字节
-        pos += 1;  // 继续搜索
+    // 如果 action 是 "secondline"，需要检查是否在 secondlinestatus_set 中
+    if (action == "secondline")
+    {
+        size_t j = 0;
+        for (; secondlinestatus_set[j] != -1; j++)
+        {
+            if (i == secondlinestatus_set[j])
+                return false; // 找到匹配项，继续执行
+        }
+        return true; // 未找到匹配项，跳过
     }
-    return result;
+
+    // 默认不跳过
+    return false;
+}
+
+/***************************************************************************
+  函数名称：print_student_info
+  功    能：
+  输入参数：
+  返 回 值：
+  说    明：
+ ***************************************************************************/
+void hw_check::print_student_info(const Student& student, bool file_is_all, bool stu_is_all, int& stunum_cnt, int max_stu_length, bool is_special)
+{
+    if (file_is_all)
+        cout << setw(3) << ++stunum_cnt << ": 学号-" << student.no << " 姓名-" << replaceDot(student.name) << " 课号-" << student.cno << " 文件数量-" << hwlist.size() << endl;
+    else
+    {
+        if (stu_is_all)
+            cout << setw(3) << ++stunum_cnt << ": " << student.no << "/" << setw(max_stu_length) << replaceDot(student.name) << " : ";
+        else
+            if (student.cno == "5000244001602")
+                cout << setw(3) << ++stunum_cnt << ": " << student.no << "/" << setw(max_stu_length) << replaceDot(student.name) << "           : ";
+            else
+                cout << setw(3) << ++stunum_cnt << ": " << student.no << "/" << setw(max_stu_length) << replaceDot(student.name) << "   : ";
+    }
+}
+
+/***************************************************************************
+  函数名称：check_and_record_file_status
+  功    能：
+  输入参数：
+  返 回 值：
+  说    明：
+ ***************************************************************************/
+FILE_SITUATIONS hw_check::check_and_record_file_status(const string& filepath, const string& filename, const Student& student, vector<vector<Student>>& total_check_stulist) 
+{
+    FILE_SITUATIONS filestatus = PASS; // 默认状态是通过
+    if (this->action == "base")
+    {
+        filestatus = get_base(filepath, filename);
+        cout << FILESTATUS_STR[filestatus] << endl;
+    }
+    else if (this->action == "firstline")
+    {
+        filestatus = get_print_first(filepath, filename, student);
+    }
+    else if (this->action == "secondline")
+    {
+        vector<Student> check_stulist; // 次行的互验学生名单
+        filestatus = get_print_second(filepath, check_stulist, student.no);
+        if (filestatus == OTHER_ERROR)
+            filestatus = PASS; // 特殊判断
+        total_check_stulist.push_back(check_stulist);
+    }
+
+    return filestatus;
+}
+
+/***************************************************************************
+  函数名称：print_file_check_result
+  功    能：
+  输入参数：
+  返 回 值：
+  说    明：
+ ***************************************************************************/
+void hw_check::print_file_check_result(int pass_count, int total_count) 
+{
+    string str = "文件";
+    if (total_count == stulist.size())
+        str = "学生";
+    if (pass_count == total_count)
+        cout << "全部通过" << pass_count << "/" << total_count << "个" << str << "，本次通过" << pass_count << "个" << endl;
+    else 
+        cout << "检查通过" << pass_count << "/" << total_count << "个" << str << "，本次通过" << pass_count << "个" << endl;
 }

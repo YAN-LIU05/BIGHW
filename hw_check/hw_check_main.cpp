@@ -1,7 +1,6 @@
 /* 2352018 大数据 刘彦 */
 #define _CRT_SECURE_NO_WARNINGS
-#include "hw_check.h"
-//#include "../include/class_aat.h"
+#include "hw_check_class.h"
 
 using namespace std;
 
@@ -14,7 +13,7 @@ using namespace std;
  ***************************************************************************/
 static void usage(const char* const full_procname)
 {
-	const char *procname = strrchr(full_procname, '\\');
+	const char* procname = strrchr(full_procname, '\\');
 	if (procname == NULL)
 		procname = full_procname;
 
@@ -48,7 +47,7 @@ static void usage(const char* const full_procname)
 
 	const char* DEMO_CNO = "10108001";
 	const char* DEMO_SRC_FNAME = "12-b1.cpp";
-	const char* DEMO_STUNO = "2259999";
+	const char* DEMO_STUNO = "2359999";
 
 	cout << "e.g.   " << procname << " --action base --cno " << DEMO_CNO << " --stu all --file all             : 检查" << DEMO_CNO << "所有学生的所有作业的基本信息" << endl;
 	cout << "       " << procname << " --action base --cno " << DEMO_CNO << " --stu all --file all --chapter 4 : 检查" << DEMO_CNO << "所有学生的第4章作业的基本信息" << endl;
@@ -99,87 +98,70 @@ int main(int argc, char** argv)
 		args_analyse_tools()  //最后一个，用于结束
 	};
 
-	int need_fixed_args = 0;	//试试改为1
 	int cur_argc;
-	
-	if (argc == 1) {
-		usage(argv[0]);
-		return -1;
-	}
-	if ((cur_argc = args_analyse_process(argc, argv, args, need_fixed_args)) <= 0)
-	{
-		//错误信息在函数中已打印
-		return -1;
-	}
-	/* 打印参数分析的结果 */
-	
-	/* 带--help参数做特殊处理，打印提示信息后结束 */
-	if (args[OPT_ARGS_HELP].existed())
+
+	if (argc == 1)
 	{
 		usage(argv[0]);
 		return -1;
+	}
+	if ((cur_argc = args_analyse_process(argc, argv, args, 0)) <= 0)
+		return -1;
+	if (args[ARGS_HELP].existed())
+	{
+		usage(argv[0]);
+		return -1;
+	}
+	if (!args[ARGS_ACTION].existed())
+	{
+		usage(argv[0]);
+		cout << "参数[" << args[ARGS_ACTION].get_name() << "]必须指定." << endl;
+		return -1;
+	}
+	if (!args[ARGS_CNO].existed())
+	{
+		usage(argv[0]);
+		cout << "参数[" << args[ARGS_CNO].get_name() << "]必须指定." << endl;
+		return -1;
+	}
+	if (!args[ARGS_STU].existed())
+	{
+		usage(argv[0]);
+		cout << "参数[" << args[ARGS_STU].get_name() << "]必须指定." << endl;
+		return -1;
+	}
+	if (!args[ARGS_FILE].existed())
+	{
+		usage(argv[0]);
+		cout << "参数[" << args[ARGS_FILE].get_name() << "]必须指定." << endl;
+		return -1;
+	}
+	if (args[ARGS_ACTION].get_string() == "secondline")
+	{
+		if (args[ARGS_FILE].get_string() == "all")
+		{
+			cout << "HW_Check_SecondLine 只能针对单文件" << endl;
+			return -1;
+		}
+		if (args[ARGS_STU].get_string() != "all")
+		{
+			cout << "HW_Check_SecondLine 只能针对全体学生" << endl;
+			return -1;
+		}
+	}
+	if (args[ARGS_CHAPTER].existed() || args[ARGS_WEEK].existed())
+	{
+		if (args[ARGS_FILE].get_string() != "all")
+		{
+			cout << "参数[--chapter/--week]不能出现在[--file 单个文件名]时." << endl;
+			return -1;
+		}
 	}
 
-	/* 判断必选项 */
-	if (!args[OPT_ARGS_ACTION].existed())
-	{
-		usage(argv[0]);
-		cout << "参数[" << args[OPT_ARGS_ACTION].get_name() << "]必须指定." << endl;
+	hw_check check;
+	if (check.read_cmd(args) <= 0 || !check.read_config(check.cfgfile) || !check.read_db_content())
 		return -1;
-	}
-	if (!args[OPT_ARGS_CNO].existed())
-	{
-		usage(argv[0]);
-		cout << "参数[" << args[OPT_ARGS_CNO].get_name() << "]必须指定." << endl;
-		return -1;
-	}
-	if (!args[OPT_ARGS_STU].existed())
-	{
-		usage(argv[0]);
-		cout << "参数[" << args[OPT_ARGS_STU].get_name() << "]必须指定." << endl;
-		return -1;
-	}
-	if (!args[OPT_ARGS_FILE].existed())
-	{
-		usage(argv[0]);
-		cout << "参数[" << args[OPT_ARGS_FILE].get_name() << "]必须指定." << endl;
-		return -1;
-	}
-	/* secondline参数 --file不是all，--stu必须是all */
-	if (args[OPT_ARGS_ACTION].get_string() == "secondline")
-	{
-		if (args[OPT_ARGS_FILE].get_string() == "all") 
-		{
-			cerr << "HW_Check_SecondLine 只能针对单文件" << endl;
-			return -1;
-		}
-		if (args[OPT_ARGS_STU].get_string() != "all") 
-		{
-			cerr << "HW_Check_SecondLine 只能针对全体学生" << endl;
-			return -1;
-		}
-	}
-	if (args[OPT_ARGS_CHAPTER].existed() || args[OPT_ARGS_WEEK].existed()) 
-	{
-		if (args[OPT_ARGS_FILE].get_string() != "all") 
-		{
-			cerr << "参数[--chapter/--week]不能出现在[--file 单个文件名]时." << endl;
-			return -1;
-		}
-	}
-	hw_check hwcheck;
-	/* 检测cmd参数并进行写入hwcheck中 */
-	if (hwcheck.read_hwcheck_cmdpara(args) <= 0)
-		return -1;
-	/* 读取配置文件信息 */
-	if (!hwcheck.read_db_config(hwcheck.cfgfile))
-		return -1;
-	/* 读取数据库信息 */
-	if (!hwcheck.read_db_content())
-		return -1;
-	/* 进行base/firstline/secondline检测 */
-	hwcheck.hw_check_threeinone();
-	
+	check.hw_check_all();
+
 	return 0;
 }
-
