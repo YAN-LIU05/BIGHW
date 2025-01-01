@@ -53,9 +53,4 @@
       <Filter>资源文件</Filter>
     </Library>
   </ItemGroup>
-  <ItemGroup>
-    <None Include="hw_check.conf">
-      <Filter>源文件</Filter>
-    </None>
-  </ItemGroup>
 </Project>
